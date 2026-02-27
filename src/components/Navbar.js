@@ -7,6 +7,8 @@ import { motion } from 'framer-motion';
 import { supabaseBrowser } from '@/app/lib/supabaseBrowserClient';
 
 const NavContainer = styled.nav`
+  position: relative;
+  z-index: 50;
   display: flex;
   justify-content: space-between;
   align-items: center;
