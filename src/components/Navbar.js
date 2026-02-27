@@ -8,7 +8,7 @@ import { supabaseBrowser } from '@/app/lib/supabaseBrowserClient';
 
 const NavContainer = styled.nav`
   position: relative;
-  z-index: 50;
+  z-index: 200;
   display: flex;
   justify-content: space-between;
   align-items: center;
