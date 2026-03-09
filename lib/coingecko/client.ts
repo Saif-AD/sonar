@@ -3,13 +3,11 @@
  * Centralized client with caching, rate limiting, and error handling
  */
 
+const BASE_URL = 'https://pro-api.coingecko.com/api/v3'
 const API_KEY = process.env.COINGECKO_API_KEY
-const BASE_URL = API_KEY
-  ? 'https://pro-api.coingecko.com/api/v3'
-  : 'https://api.coingecko.com/api/v3'
 
 if (!API_KEY) {
-  console.warn('⚠️ COINGECKO_API_KEY not set - using free CoinGecko API (rate-limited)')
+  console.warn('⚠️ COINGECKO_API_KEY not set - CoinGecko features will be limited')
 }
 
 interface CacheEntry<T> {
@@ -52,9 +50,8 @@ async function fetchWithRetry<T>(
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const url = `${BASE_URL}${endpoint}`
-      const fullUrl = API_KEY
-        ? `${url}${endpoint.includes('?') ? '&' : '?'}x_cg_pro_api_key=${API_KEY}`
-        : url
+      const separator = endpoint.includes('?') ? '&' : '?'
+      const fullUrl = `${url}${separator}x_cg_pro_api_key=${API_KEY}`
 
       const response = await fetch(fullUrl, {
         headers: {
