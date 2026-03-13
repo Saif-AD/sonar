@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 
 export async function GET() {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE) {
@@ -11,13 +12,17 @@ export async function GET() {
   const STABLECOINS = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD', 'USDK', 'USDN', 'FEI', 'TRIBE', 'CUSD']
 
   // NEW: Use whale_address column and exclude CEX addresses
-  const { data, error } = await supabaseAdmin
-    .from('all_whale_transactions')
-    .select('whale_address, token_symbol, classification, usd_value, timestamp, whale_score, counterparty_type')
-    .gte('timestamp', since)
-    .not('whale_address', 'is', null)
-    .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
-    .in('classification', ['BUY', 'SELL', 'TRANSFER'])
+  const { data, error } = await queryAllChains(
+    (sb, table) =>
+      sb
+        .from(table)
+        .select('whale_address, token_symbol, classification, usd_value, timestamp, whale_score, counterparty_type')
+        .gte('timestamp', since)
+        .not('whale_address', 'is', null)
+        .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
+        .in('classification', ['BUY', 'SELL', 'TRANSFER']),
+    { orderBy: 'timestamp', ascending: false }
+  )
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

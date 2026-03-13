@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains, countAllChains } from '@/app/lib/queryAllChains'
 
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD', 'USDK', 'USDN', 'FEI', 'TRIBE', 'CUSD']
 
@@ -18,30 +18,58 @@ export async function GET(req) {
   const limitRaw = parseInt(searchParams.get('limit') || '100', 10)
   const limit = Math.min(Math.max(1, limitRaw), 100)
   const from = (page - 1) * limit
-  const to = from + limit - 1
 
-  let q = supabaseAdmin
-    .from('all_whale_transactions')
-    .select('transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,from_address,to_address,whale_address,counterparty_type,whale_score', { count: 'estimated' })
-    .not('token_symbol', 'is', null)
-    .not('token_symbol', 'ilike', 'unknown%')
-    .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
+  const sinceIso = (!Number.isNaN(sinceHours) && sinceHours > 0)
+    ? new Date(Date.now() - sinceHours * 60 * 60 * 1000).toISOString()
+    : null
 
-  if (!Number.isNaN(sinceHours) && sinceHours > 0) {
-    const sinceIso = new Date(Date.now() - sinceHours * 60 * 60 * 1000).toISOString()
-    q = q.gte('timestamp', sinceIso)
-  }
   const minUsd = rawMin === null || rawMin === '' ? undefined : Number(rawMin)
   const maxUsd = rawMax === null || rawMax === '' ? undefined : Number(rawMax)
-  if (typeof minUsd === 'number' && !Number.isNaN(minUsd)) q = q.gte('usd_value', minUsd)
-  if (typeof maxUsd === 'number' && !Number.isNaN(maxUsd)) q = q.lte('usd_value', maxUsd)
-  if (token) q = q.ilike('token_symbol', `%${token}%`)
-  if (side) q = q.ilike('classification', side)
-  if (chain) q = q.ilike('blockchain', `%${chain}%`)
 
-  const { data, error, count } = await q.order('timestamp', { ascending: false }).range(from, to)
+  function addFilters(q) {
+    if (sinceIso) q = q.gte('timestamp', sinceIso)
+    if (typeof minUsd === 'number' && !Number.isNaN(minUsd)) q = q.gte('usd_value', minUsd)
+    if (typeof maxUsd === 'number' && !Number.isNaN(maxUsd)) q = q.lte('usd_value', maxUsd)
+    if (token) q = q.ilike('token_symbol', `%${token}%`)
+    if (side) q = q.ilike('classification', side)
+    if (chain) q = q.ilike('blockchain', `%${chain}%`)
+    return q
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  function buildDataQuery(sb, table) {
+    let q = sb
+      .from(table)
+      .select('transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,from_address,to_address,whale_address,counterparty_type,whale_score')
+      .not('token_symbol', 'is', null)
+      .not('token_symbol', 'ilike', 'unknown%')
+      .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
+    return addFilters(q)
+  }
 
-  return NextResponse.json({ data, page, limit, count })
-} 
+  function buildCountQuery(sb, table) {
+    let q = sb
+      .from(table)
+      .select('*', { count: 'estimated', head: true })
+      .not('token_symbol', 'is', null)
+      .not('token_symbol', 'ilike', 'unknown%')
+      .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
+    return addFilters(q)
+  }
+
+  // Fetch data and count in parallel
+  const [dataResult, countResult] = await Promise.all([
+    queryAllChains(buildDataQuery, {
+      globalLimit: from + limit,
+      orderBy: 'timestamp',
+      ascending: false,
+    }),
+    countAllChains(buildCountQuery),
+  ])
+
+  if (dataResult.error) return NextResponse.json({ error: dataResult.error.message }, { status: 500 })
+
+  // Slice for pagination in JS since queryAllChains doesn't support .range()
+  const data = dataResult.data.slice(from, from + limit)
+
+  return NextResponse.json({ data, page, limit, count: countResult.count })
+}

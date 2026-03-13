@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -11,14 +12,17 @@ export async function GET() {
     const STABLECOINS = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD', 'USDK', 'USDN', 'FEI', 'TRIBE', 'CUSD']
 
     // Fetch whale transactions from past 7 days
-    const { data, error } = await supabaseAdmin
-      .from('all_whale_transactions')
-      .select('whale_address,classification,usd_value,token_symbol,whale_score,timestamp')
-      .gte('timestamp', since)
-      .in('classification', ['BUY', 'SELL', 'TRANSFER'])
-      .not('whale_address', 'is', null)
-      .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
-      .order('timestamp', { ascending: false })
+    const { data, error } = await queryAllChains(
+      (sb, table) =>
+        sb
+          .from(table)
+          .select('whale_address,classification,usd_value,token_symbol,whale_score,timestamp')
+          .gte('timestamp', since)
+          .in('classification', ['BUY', 'SELL', 'TRANSFER'])
+          .not('whale_address', 'is', null)
+          .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`),
+      { orderBy: 'timestamp', ascending: false }
+    )
     
     if (error) {
       console.error('Supabase error fetching top whales:', error)

@@ -4,10 +4,11 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { 
-  parseLunarCrushAI, 
-  fetchFreshLunarCrushData, 
-  needsFreshData 
+import { queryAllChains } from '@/app/lib/queryAllChains'
+import {
+  parseLunarCrushAI,
+  fetchFreshLunarCrushData,
+  needsFreshData
 } from './lunarcrush-parser'
 import { 
   fetchLunarCrushEnhanced,
@@ -353,39 +354,40 @@ function processLunarCrushData(data: LunarCrushEnhancedData): LunarCrushMetrics 
 /**
  * Fetch whale activity from whale_transactions table
  */
-async function fetchWhaleActivity(ticker: string, supabase: any): Promise<any[]> {
+async function fetchWhaleActivity(ticker: string, _supabase: any): Promise<any[]> {
   try {
     const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    
-    const { data, error } = await supabase
-      .from('all_whale_transactions')
-      .select(`
-        id,
-        transaction_hash,
-        token_symbol,
-        classification,
-        usd_value,
-        whale_score,
-        blockchain,
-        from_address,
-        to_address,
-        from_label,
-        to_label,
-        counterparty_type,
-        is_cex_transaction,
-        reasoning,
-        timestamp
-      `)
-      .eq('token_symbol', ticker.toUpperCase())
-      .gte('timestamp', last24Hours)
-      .order('timestamp', { ascending: false })
-      .limit(200) // Match token page limit for complete data
-    
+
+    const { data, error } = await queryAllChains(
+      (sb: any, table: string) => sb
+        .from(table)
+        .select(`
+          id,
+          transaction_hash,
+          token_symbol,
+          classification,
+          usd_value,
+          whale_score,
+          blockchain,
+          from_address,
+          to_address,
+          from_label,
+          to_label,
+          counterparty_type,
+          is_cex_transaction,
+          reasoning,
+          timestamp
+        `)
+        .eq('token_symbol', ticker.toUpperCase())
+        .gte('timestamp', last24Hours),
+      { limit: 200, globalLimit: 200, orderBy: 'timestamp', ascending: false }
+    )
+
     if (error) {
       console.error('Error fetching whale data:', error)
       return []
     }
-    
+
     return data || []
   } catch (error) {
     console.error('Error in fetchWhaleActivity:', error)

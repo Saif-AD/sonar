@@ -186,7 +186,7 @@ const Navbar = ({ onLogout }) => {
       const sinceIso = new Date(Date.now() - 24*60*60*1000).toISOString();
       const sb = supabaseBrowser();
       const { data, error } = await sb
-        .from('all_whale_transactions')
+        .from('ethereum_transactions')
         .select('token_symbol, blockchain', { count: 'exact' })
         .ilike('token_symbol', `${t}%`)
         .gte('timestamp', sinceIso)

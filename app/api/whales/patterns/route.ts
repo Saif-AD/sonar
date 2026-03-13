@@ -2,7 +2,7 @@
  * Whale Patterns API — Find recurring whale addresses for a token
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,21 +16,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Symbol required' }, { status: 400 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE!
-    )
-
     const sinceDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
     // Get all transactions for this token in the period
-    const { data: txns, error } = await supabase
-      .from('all_whale_transactions')
-      .select('whale_address, from_address, classification, usd_value, timestamp')
-      .eq('token_symbol', symbol)
-      .gte('timestamp', sinceDate)
-      .order('timestamp', { ascending: false })
-      .limit(500)
+    const { data: txns, error } = await queryAllChains(
+      (sb: any, table: string) => sb
+        .from(table)
+        .select('whale_address, from_address, classification, usd_value, timestamp')
+        .eq('token_symbol', symbol)
+        .gte('timestamp', sinceDate),
+      { limit: 500, globalLimit: 500, orderBy: 'timestamp', ascending: false }
+    )
 
     if (error) throw error
 

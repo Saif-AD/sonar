@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 import { computeUnifiedSignal } from '@/app/lib/signalEngine'
 
 export const dynamic = 'force-dynamic'
@@ -81,12 +82,14 @@ export async function GET(req) {
 async function getActiveTokens() {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
-  const { data, error } = await supabaseAdmin
-    .from('all_whale_transactions')
-    .select('token_symbol')
-    .gte('timestamp', since)
-    .in('classification', ['BUY', 'SELL'])
-    .not('token_symbol', 'is', null)
+  const { data, error } = await queryAllChains(
+    (sb, table) => sb
+      .from(table)
+      .select('token_symbol')
+      .gte('timestamp', since)
+      .in('classification', ['BUY', 'SELL'])
+      .not('token_symbol', 'is', null)
+  )
 
   if (error) {
     console.error('[SignalEngine] Error fetching active tokens:', error.message)
@@ -171,13 +174,14 @@ async function computeSignalForToken(tokenSymbol) {
 async function fetchWhaleTransactions(tokenSymbol) {
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString() // 48h for prev period comparison
 
-  const { data, error } = await supabaseAdmin
-    .from('all_whale_transactions')
-    .select('transaction_hash,timestamp,classification,usd_value,whale_address,from_address,to_address,counterparty_type,whale_score,confidence')
-    .eq('token_symbol', tokenSymbol)
-    .gte('timestamp', since)
-    .order('timestamp', { ascending: false })
-    .limit(500)
+  const { data, error } = await queryAllChains(
+    (sb, table) => sb
+      .from(table)
+      .select('transaction_hash,timestamp,classification,usd_value,whale_address,from_address,to_address,counterparty_type,whale_score,confidence')
+      .eq('token_symbol', tokenSymbol)
+      .gte('timestamp', since),
+    { limit: 500, orderBy: 'timestamp', ascending: false }
+  )
 
   if (error) {
     console.error(`[SignalEngine] Whale tx fetch error for ${tokenSymbol}:`, error.message)

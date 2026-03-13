@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD', 'USDK', 'USDN', 'FEI', 'TRIBE', 'CUSD']
 
@@ -9,11 +9,13 @@ export async function GET() {
   }
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  const { data, error } = await supabaseAdmin
-    .from('all_whale_transactions')
-    .select('token_symbol, classification, usd_value, timestamp, from_address')
-    .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
-    .gte('timestamp', since)
+  const { data, error } = await queryAllChains(
+    (sb, table) => sb
+      .from(table)
+      .select('token_symbol, classification, usd_value, timestamp, from_address')
+      .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
+      .gte('timestamp', since)
+  )
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -43,4 +45,4 @@ export async function GET() {
   rows.sort((a, b) => Math.abs(b.netUsd) - Math.abs(a.netUsd))
 
   return NextResponse.json({ data: rows })
-} 
+}

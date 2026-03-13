@@ -1,6 +1,7 @@
 import React from 'react'
 import { redirect } from 'next/navigation'
 import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 import AuthGuard from '@/app/components/AuthGuard'
 import TokenDetailClient from './TokenDetailClient'
 
@@ -62,14 +63,18 @@ export default async function TokenDetail({ params, searchParams }) {
   const minUsd = searchParams?.minUsd ? Number(searchParams.minUsd) : undefined
 
   const sinceIso = new Date(Date.now() - (sinceHours > 0 ? sinceHours : 24) * 60 * 60 * 1000).toISOString()
-  let q = supabaseAdmin
-    .from('all_whale_transactions')
-    .select('transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,from_address,to_address,whale_score,confidence,whale_address,counterparty_address,counterparty_type,from_label,to_label,reasoning')
-    .eq('token_symbol', symbol)
-    .gte('timestamp', sinceIso)
-    .order('timestamp', { ascending: false })
-  if (typeof minUsd === 'number' && !Number.isNaN(minUsd)) q = q.gte('usd_value', minUsd)
-  const { data, error } = await q.limit(200)
+  const { data, error } = await queryAllChains(
+    (sb, table) => {
+      let q = sb
+        .from(table)
+        .select('transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,from_address,to_address,whale_score,confidence,whale_address,counterparty_address,counterparty_type,from_label,to_label,reasoning')
+        .eq('token_symbol', symbol)
+        .gte('timestamp', sinceIso)
+      if (typeof minUsd === 'number' && !Number.isNaN(minUsd)) q = q.gte('usd_value', minUsd)
+      return q
+    },
+    { limit: 200, globalLimit: 200, orderBy: 'timestamp', ascending: false }
+  )
 
   let totalVolume = 0, netFlow = 0, buys = 0, sells = 0
   const whales = new Set()

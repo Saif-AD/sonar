@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 
 export const dynamic = 'force-dynamic'
 
@@ -263,12 +263,14 @@ export async function GET(req) {
     try {
       const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       
-      const { data: whaleTxs, error: whaleError } = await supabaseAdmin
-        .from('all_whale_transactions')
-        .select('*')
-        .eq('token_symbol', symbol)
-        .gte('timestamp', since24h)
-        .order('timestamp', { ascending: false })
+      const { data: whaleTxs, error: whaleError } = await queryAllChains(
+        (sb, table) => sb
+          .from(table)
+          .select('*')
+          .eq('token_symbol', symbol)
+          .gte('timestamp', since24h),
+        { orderBy: 'timestamp', ascending: false }
+      )
 
       if (!whaleError && whaleTxs) {
         const buys = whaleTxs.filter(t => t.classification?.toUpperCase() === 'BUY')

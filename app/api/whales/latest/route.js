@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD', 'USDK', 'USDN', 'FEI', 'TRIBE', 'CUSD']
 
@@ -18,12 +19,20 @@ export async function GET(req) {
   const from = (page - 1) * limit
   const to = from + limit - 1
 
-  const { data, error } = await supabaseAdmin
-    .from('all_whale_transactions')
-    .select('transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,whale_score')
-    .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
-    .order('timestamp', { ascending: false })
-    .range(from, to)
+  const { data, error } = await queryAllChains(
+    (sb, table) =>
+      sb
+        .from(table)
+        .select('transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,whale_score')
+        .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`),
+    { limit: to + 1, globalLimit: to + 1, orderBy: 'timestamp', ascending: false }
+  )
+
+  if (!error && data) {
+    // Apply pagination offset on the merged result
+    data.splice(0, from)
+    data.splice(limit)
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

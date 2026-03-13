@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Allow up to 60s for computation
@@ -84,13 +84,15 @@ export async function POST(req) {
     // Auto-detect coins from whale transactions if not provided
     let targetCoins = coins
     if (!targetCoins) {
-      const { data: topCoins } = await supabaseAdmin
-        .from('all_whale_transactions')
-        .select('token_symbol')
-        .gte('timestamp', startTime.toISOString())
-        .lte('timestamp', endTime.toISOString())
-        .not('token_symbol', 'is', null)
-        .not('token_symbol', 'ilike', 'unknown%')
+      const { data: topCoins } = await queryAllChains(
+        (sb, table) => sb
+          .from(table)
+          .select('token_symbol')
+          .gte('timestamp', startTime.toISOString())
+          .lte('timestamp', endTime.toISOString())
+          .not('token_symbol', 'is', null)
+          .not('token_symbol', 'ilike', 'unknown%')
+      )
       
       const coinCounts = {}
       topCoins?.forEach(t => {
@@ -193,12 +195,14 @@ async function generateHourlySignals(coins, startTime, endTime) {
       const hourEnd = new Date(hourStart.getTime() + hourMs)
       
       // Fetch whale transactions for this coin in this hour
-      const { data: txs } = await supabaseAdmin
-        .from('all_whale_transactions')
-        .select('classification,usd_value')
-        .eq('token_symbol', coin)
-        .gte('timestamp', hourStart.toISOString())
-        .lt('timestamp', hourEnd.toISOString())
+      const { data: txs } = await queryAllChains(
+        (sb, table) => sb
+          .from(table)
+          .select('classification,usd_value')
+          .eq('token_symbol', coin)
+          .gte('timestamp', hourStart.toISOString())
+          .lt('timestamp', hourEnd.toISOString())
+      )
       
       if (!txs || txs.length === 0) {
         signals[coin].push({

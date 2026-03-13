@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains, countAllChains } from '@/app/lib/queryAllChains'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,21 +13,21 @@ export async function GET() {
       return NextResponse.json({ error: 'Supabase env vars not set' }, { status: 503 })
     }
 
-    // Use EXACT same pattern as /api/trades (which works!)
     const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
-    let q = supabaseAdmin
-      .from('all_whale_transactions')
-      .select('transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,from_address,whale_score,to_address,whale_address,counterparty_type', { count: 'estimated' })
-      .not('token_symbol', 'is', null)
-      .not('token_symbol', 'ilike', 'unknown%')
-      .in('classification', ['BUY', 'SELL', 'TRANSFER'])
+    // Query all per-chain tables in parallel and merge results
+    const { data: recentData, error: recentError } = await queryAllChains(
+      (sb, table) => sb
+        .from(table)
+        .select('transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,from_address,whale_score,to_address,whale_address,counterparty_type')
+        .not('token_symbol', 'is', null)
+        .not('token_symbol', 'ilike', 'unknown%')
+        .in('classification', ['BUY', 'SELL', 'TRANSFER'])
+        .gte('timestamp', sinceIso),
+      { limit: 1000, globalLimit: 5000 }
+    )
 
-    q = q.gte('timestamp', sinceIso)
-
-    const { data: recentData, error: recentError } = await q.order('timestamp', { ascending: false }).limit(5000)
-
-    console.log(`Dashboard API: Fetched ${recentData?.length || 0} transactions, error:`, recentError)
+    console.log(`Dashboard API: Fetched ${recentData?.length || 0} transactions from per-chain tables, error:`, recentError)
 
     if (recentError) {
       console.error('Dashboard API error:', recentError)
@@ -95,20 +96,27 @@ export async function GET() {
     let totalSellCount24h = null
     try {
       const [tot, buys, sells] = await Promise.all([
-        supabaseAdmin.from('all_whale_transactions')
+        countAllChains((sb, table) => sb.from(table)
           .select('transaction_hash', { count: 'exact', head: true })
           .not('token_symbol', 'is', null)
           .not('token_symbol', 'ilike', 'unknown%')
           .not('whale_address', 'is', null)
           .in('classification', ['BUY', 'SELL', 'TRANSFER'])
-          .gte('timestamp', sinceIso),
-        supabaseAdmin.from('all_whale_transactions')
+          .gte('timestamp', sinceIso)),
+        countAllChains((sb, table) => sb.from(table)
+          .select('classification', { count: 'exact', head: true })
+          .not('token_symbol', 'is', null)
+          .not('token_symbol', 'ilike', 'unknown%')
+          .not('whale_address', 'is', null)
+          .eq('classification', 'BUY')
+          .gte('timestamp', sinceIso)),
+        countAllChains((sb, table) => sb.from(table)
           .select('classification', { count: 'exact', head: true })
           .not('token_symbol', 'is', null)
           .not('token_symbol', 'ilike', 'unknown%')
           .not('whale_address', 'is', null)
           .eq('classification', 'SELL')
-          .gte('timestamp', sinceIso)
+          .gte('timestamp', sinceIso)),
       ])
       total24hCount = tot?.count ?? null
       totalBuyCount24h = buys?.count ?? null
@@ -197,16 +205,16 @@ export async function GET() {
       const tokensForAccuracy = Array.from(byCoin.keys()).filter(t => t !== '—' && t !== 'UNKNOWN')
       const counts = await Promise.all(tokensForAccuracy.map(async (token) => {
         const [buys, sells] = await Promise.all([
-          supabaseAdmin.from('all_whale_transactions')
+          countAllChains((sb, table) => sb.from(table)
             .select('transaction_hash', { count: 'exact', head: true })
             .eq('token_symbol', token)
             .gte('timestamp', sinceIso)
-            .in('classification', ['BUY', 'buy']),
-          supabaseAdmin.from('all_whale_transactions')
+            .in('classification', ['BUY', 'buy'])),
+          countAllChains((sb, table) => sb.from(table)
             .select('transaction_hash', { count: 'exact', head: true })
             .eq('token_symbol', token)
             .gte('timestamp', sinceIso)
-            .in('classification', ['SELL', 'sell']),
+            .in('classification', ['SELL', 'sell'])),
         ])
         return { token, buys: Number(buys?.count || 0), sells: Number(sells?.count || 0) }
       }))

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,24 +11,20 @@ export async function GET() {
   }
 
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE
-    )
-
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const today = new Date().toISOString().split('T')[0]
 
     const STABLECOINS = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD', 'USDK', 'USDN', 'FEI', 'TRIBE', 'CUSD']
 
     // Get 24h transactions
-    const { data: txns, error } = await supabase
-      .from('all_whale_transactions')
-      .select('token_symbol, usd_value, classification, whale_address, from_address, timestamp')
-      .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
-      .gte('timestamp', since)
-      .order('timestamp', { ascending: false })
-      .limit(2000)
+    const { data: txns, error } = await queryAllChains(
+      (sb, table) => sb
+        .from(table)
+        .select('token_symbol, usd_value, classification, whale_address, from_address, timestamp')
+        .not('token_symbol', 'in', `(${STABLECOINS.join(',')})`)
+        .gte('timestamp', since),
+      { limit: 2000, globalLimit: 2000, orderBy: 'timestamp', ascending: false }
+    )
 
     if (error) throw error
 

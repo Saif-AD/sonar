@@ -1,5 +1,6 @@
 import React from 'react'
 import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 import AuthGuard from '@/app/components/AuthGuard'
 import WhaleDetailClient from './WhaleDetailClient'
 
@@ -73,24 +74,29 @@ export default async function WhaleProfile({ params }) {
   } : null
   
   // First try 24h, if no data, try 7 days
-  let { data, error } = await supabaseAdmin
-    .from('all_whale_transactions')
-    .select('transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,whale_score,counterparty_type,from_address,to_address,whale_address,counterparty_address,reasoning,confidence,from_label,to_label')
-    .or(`whale_address.eq.${addr},from_address.eq.${addr},to_address.eq.${addr}`)
-    .gte('timestamp', since)
-    .order('timestamp', { ascending: false })
-    .limit(500)
-  
+  const whaleSelect = 'transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,whale_score,counterparty_type,from_address,to_address,whale_address,counterparty_address,reasoning,confidence,from_label,to_label'
+  const whaleQueryOpts = { limit: 500, globalLimit: 500, orderBy: 'timestamp', ascending: false }
+
+  let { data, error } = await queryAllChains(
+    (sb, table) => sb
+      .from(table)
+      .select(whaleSelect)
+      .or(`whale_address.eq.${addr},from_address.eq.${addr},to_address.eq.${addr}`)
+      .gte('timestamp', since),
+    whaleQueryOpts
+  )
+
   // If no data in 24h, try last 7 days
   if (!data || data.length === 0) {
     since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    const result = await supabaseAdmin
-      .from('all_whale_transactions')
-      .select('transaction_hash,timestamp,blockchain,token_symbol,classification,usd_value,whale_score,counterparty_type,from_address,to_address,whale_address,counterparty_address,reasoning,confidence,from_label,to_label')
-      .or(`whale_address.eq.${addr},from_address.eq.${addr},to_address.eq.${addr}`)
-      .gte('timestamp', since)
-      .order('timestamp', { ascending: false })
-      .limit(500)
+    const result = await queryAllChains(
+      (sb, table) => sb
+        .from(table)
+        .select(whaleSelect)
+        .or(`whale_address.eq.${addr},from_address.eq.${addr},to_address.eq.${addr}`)
+        .gte('timestamp', since),
+      whaleQueryOpts
+    )
     data = result.data
     error = result.error
   }

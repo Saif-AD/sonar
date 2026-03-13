@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains } from '@/app/lib/queryAllChains'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -17,12 +17,14 @@ export async function POST(req) {
     const since6h = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
 
     // Fetch all 24h transactions for this token
-    const { data: txs24h, error } = await supabaseAdmin
-      .from('all_whale_transactions')
-      .select('*')
-      .eq('token_symbol', tokenSymbol)
-      .gte('timestamp', since24h)
-      .order('timestamp', { ascending: false })
+    const { data: txs24h, error } = await queryAllChains(
+      (sb, table) => sb
+        .from(table)
+        .select('*')
+        .eq('token_symbol', tokenSymbol)
+        .gte('timestamp', since24h),
+      { orderBy: 'timestamp', ascending: false }
+    )
 
     if (error) {
       throw error

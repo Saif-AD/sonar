@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/app/lib/supabaseAdmin'
+import { queryAllChains, countAllChains } from '@/app/lib/queryAllChains'
 
 export async function GET() {
   try {
@@ -12,38 +12,38 @@ export async function GET() {
     const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
     // Get total count of all transactions
-    const { count: totalCount } = await supabaseAdmin
-      .from('all_whale_transactions')
-      .select('*', { count: 'exact', head: true })
+    const { count: totalCount } = await countAllChains(
+      (sb, table) => sb.from(table).select('*', { count: 'exact', head: true })
+    )
 
     // Get count from last 7 days
-    const { count: count7d } = await supabaseAdmin
-      .from('all_whale_transactions')
-      .select('*', { count: 'exact', head: true })
-      .gte('timestamp', since7d)
+    const { count: count7d } = await countAllChains(
+      (sb, table) => sb.from(table).select('*', { count: 'exact', head: true }).gte('timestamp', since7d)
+    )
 
     // Get count from last 24 hours
-    const { count: count24h } = await supabaseAdmin
-      .from('all_whale_transactions')
-      .select('*', { count: 'exact', head: true })
-      .gte('timestamp', since24h)
+    const { count: count24h } = await countAllChains(
+      (sb, table) => sb.from(table).select('*', { count: 'exact', head: true }).gte('timestamp', since24h)
+    )
 
     // Get sample of recent data
-    const { data: sampleData } = await supabaseAdmin
-      .from('all_whale_transactions')
-      .select('transaction_hash, timestamp, token_symbol, classification, blockchain, usd_value')
-      .order('timestamp', { ascending: false })
-      .limit(5)
+    const { data: sampleData } = await queryAllChains(
+      (sb, table) => sb
+        .from(table)
+        .select('transaction_hash, timestamp, token_symbol, classification, blockchain, usd_value'),
+      { orderBy: 'timestamp', ascending: false, globalLimit: 5 }
+    )
 
     // Get sample with filters applied (like dashboard)
-    const { data: filteredSample } = await supabaseAdmin
-      .from('all_whale_transactions')
-      .select('transaction_hash, timestamp, token_symbol, classification, blockchain, usd_value')
-      .not('token_symbol', 'is', null)
-      .not('token_symbol', 'ilike', 'unknown%')
-      .gte('timestamp', since24h)
-      .order('timestamp', { ascending: false })
-      .limit(5)
+    const { data: filteredSample } = await queryAllChains(
+      (sb, table) => sb
+        .from(table)
+        .select('transaction_hash, timestamp, token_symbol, classification, blockchain, usd_value')
+        .not('token_symbol', 'is', null)
+        .not('token_symbol', 'ilike', 'unknown%')
+        .gte('timestamp', since24h),
+      { orderBy: 'timestamp', ascending: false, globalLimit: 5 }
+    )
 
     return NextResponse.json({
       debug: {
